@@ -1,0 +1,159 @@
+#!/bin/ksh
+set -eu
+umask 022
+
+ARCH=$(machine -a)
+MIRROR=$(sed 's/#.*//;/^$/d' /etc/installurl) 2>/dev/null ||
+	MIRROR='https://cdn.openbsd.org/pub/OpenBSD'
+
+while getopts 'a:m:' arg; do
+	case ${arg} in
+	a)	ARCH=${OPTARG}
+		;;
+	m)	MIRROR=${OPTARG}
+		;;
+	*)	echo "usage: ${0##*/} [-a arch] [-m mirror]" >&2
+		exit 1
+		;;
+	esac
+done
+
+MIRRORBASE="${MIRROR}/snapshots/${ARCH}"
+MIRRORPORTS="${MIRROR}/snapshots/packages/${ARCH}"
+
+TMPDIR=$(mktemp -d -t rebootstrap.XXXXXXXXXX) || exit 1
+PORTSINDEX="${TMPDIR}/index.txt"
+PORTSDIR="${TMPDIR}/ports"
+
+# arch dependant configuration
+case "${ARCH}" in
+aarch64)
+	triple_arch=aarch64-unknown-openbsd
+	eports=
+	;;
+amd64)
+	triple_arch=x86_64-unknown-openbsd
+	eports=
+	;;
+i386)
+	triple_arch=i686-unknown-openbsd
+	eports=
+	;;
+sparc64)
+	triple_arch=sparc64-unknown-openbsd
+	eports=gcc-libs
+	;;
+*)
+	echo "error: unsupported architecture: ${ARCH}" >&2
+	exit 1
+esac
+
+cat <<EOF
+==>> arch: ${ARCH}
+==>> mirror: ${MIRROR}
+EOF
+
+# get base version
+set -A _KERNV -- $(sysctl -n kern.version |
+	sed 's/^OpenBSD \([1-9][0-9]*\)\.\([0-9]\)\([^ ]*\).*/\1 \2 \3/;q')
+BV=${_KERNV[0]}${_KERNV[1]}
+echo "==>> OpenBSD base${BV}"
+
+# get base tarball
+ftp -Vmo "${TMPDIR}/base${BV}.tgz" \
+	"${MIRRORBASE}/base${BV}.tgz"
+
+# get index of packages
+mkdir "${PORTSDIR}"
+ftp -Vmo- "${MIRRORPORTS}" \
+	| sed -ne 's|.* href="\([^"]*\.tgz\)".*|\1|p' \
+	> "${PORTSINDEX}"
+
+# get rust version
+RV=$(sed -ne 's/^rust-\([0-9].*\)\.tgz$/\1/p' "${PORTSINDEX}")
+echo "==>> Rust version ${RV}"
+
+# process ports bootstrap dependencies
+for pkgname in rust curl nghttp2 libgit2 libssh2 ${eports} ; do
+	pkgfile=$(grep -- "^${pkgname}-[0-9].*\.tgz" "${PORTSINDEX}")
+
+	# download
+	ftp -Vmo "${TMPDIR}/${pkgfile}" "${MIRRORPORTS}/${pkgfile}"
+
+	# unpack
+	tar zxf "${TMPDIR}/${pkgfile}" -C "${PORTSDIR}"
+done
+
+# extract base libraries
+mkdir "${TMPDIR}/base"
+tar zxf "${TMPDIR}/base${BV}.tgz" \
+	-C "${TMPDIR}/base" \
+	'./usr/lib/lib*.so*'
+
+# generate bootstrap directory
+BOOTSTRAPDIR="${PWD}/rustc-bootstrap-${ARCH}-${RV}-$(date +%Y%m%d)"
+mkdir "${BOOTSTRAPDIR}"
+
+echo "==>> Creating bootstrap directory: ${BOOTSTRAPDIR}"
+
+# copy files for bootstrap: bin
+mkdir "${BOOTSTRAPDIR}/bin"
+for i in rustc rustdoc cargo ; do
+	cp "${PORTSDIR}/bin/$i" "${BOOTSTRAPDIR}/bin/$i.bin"
+	llvm-strip "${BOOTSTRAPDIR}/bin/$i.bin"
+
+	cat >"${BOOTSTRAPDIR}/bin/$i" <<EOF
+#!/bin/sh
+_base="\${0%/*}"
+LD_LIBRARY_PATH="\${_base}/../lib\${LD_LIBRARY_PATH:+:}\${LD_LIBRARY_PATH:-}" exec "\${_base}/$i.bin" "\$@"
+EOF
+	chmod 0755 "${BOOTSTRAPDIR}/bin/$i"
+done
+
+# copy files for bootstrap: rustlib
+mkdir "${BOOTSTRAPDIR}/lib"
+cp -R "${PORTSDIR}/lib/rustlib" "${BOOTSTRAPDIR}/lib"
+find "${BOOTSTRAPDIR}/lib/rustlib" -name 'lib*.so*' -execdir llvm-strip {} \;
+
+# copy required libraries
+addlibs() {
+	local f
+
+	readelf -d "$1" \
+	| sed -ne 's/.*Shared library:.*\[\([^]]*\)].*/\1/p' \
+	| while read name ; do
+		path=""
+
+		# search path (ports, base). last match wins.
+		[[ -r ${PORTSDIR}/lib/${name} ]] && path=${PORTSDIR}/lib/${name}
+		[[ -r ${TMPDIR}/base/usr/lib/${name} ]] && path=${TMPDIR}/base/usr/lib/${name}
+
+		# name not found
+		if [[ ${path} = "" ]] ; then
+			echo "error: library not found: $1: ${name}" >&2
+			exit 1
+		fi
+
+		# already copied, skip
+		[[ -r ${BOOTSTRAPDIR}/lib/${name} ]] && continue
+
+		# copy (or link if under rustlib/)
+		if [[ ! -r "${BOOTSTRAPDIR}/lib/rustlib/${triple_arch}/lib/${name}" ]] ; then
+			llvm-strip "${path}"
+			cp "${path}" "${BOOTSTRAPDIR}/lib"
+		else
+			ln -s "rustlib/${triple_arch}/lib/${name}" "${BOOTSTRAPDIR}/lib/${name}"
+		fi
+
+		# recursively add libs
+		addlibs "${path}"
+	done
+}
+
+for elf in "${BOOTSTRAPDIR}/bin/"*.bin "${BOOTSTRAPDIR}/lib/rustlib/${triple_arch}/codegen-backends/"lib*.so ; do
+	[[ ! -r "${elf}" ]] && continue
+	addlibs "${elf}"
+done
+
+# cleaning
+rm -rf -- "${TMPDIR}"
