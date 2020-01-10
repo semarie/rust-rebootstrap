@@ -75,9 +75,16 @@ set -A _KERNV -- $(sysctl -n kern.version |
 BV=${_KERNV[0]}${_KERNV[1]}
 echo "==>> OpenBSD base${BV}"
 
+# get base signature
+ftp -Vmo "${TMPDIR}/SHA256.sig" \
+	"${MIRRORBASE}/SHA256.sig"
+
 # get base tarball
 ftp -Vmo "${TMPDIR}/base${BV}.tgz" \
 	"${MIRRORBASE}/base${BV}.tgz"
+
+# verify base tarball
+( cd "${TMPDIR}" && signify -C -p "/etc/signify/openbsd-${BV}-base.pub" -x SHA256.sig "base${BV}.tgz" )
 
 # get index of packages
 mkdir "${PORTSDIR}"
@@ -93,11 +100,10 @@ echo "==>> Rust version ${RV}"
 for pkgname in rust curl nghttp2 libgit2 libssh2 ${eports} ; do
 	pkgfile=$(grep -- "^${pkgname}-[0-9].*\.tgz" "${PORTSINDEX}")
 
-	# download
-	ftp -Vmo "${TMPDIR}/${pkgfile}" "${MIRRORPORTS}/${pkgfile}"
-
-	# unpack
-	tar zxf "${TMPDIR}/${pkgfile}" -C "${PORTSDIR}"
+	# download, verify, extract
+	ftp -Vmo - "${MIRRORPORTS}/${pkgfile}" \
+		| signify -Vz -t pkg \
+		| tar zxf - -C "${PORTSDIR}"
 done
 
 # extract base libraries
