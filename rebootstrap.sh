@@ -34,6 +34,12 @@ while getopts 'a:m:' arg; do
 	esac
 done
 
+# ensure third-parties programs to be present before running
+if ! command -v llvm-strip >/dev/null; then
+	echo "error: llvm-strip missing: please install llvm package" >&2
+	exit 1
+fi
+
 MIRRORBASE="${MIRROR}/snapshots/${ARCH}"
 MIRRORPORTS="${MIRROR}/snapshots/packages/${ARCH}"
 
