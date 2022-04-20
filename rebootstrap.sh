@@ -1,6 +1,6 @@
 #!/bin/ksh
 #
-# Copyright (c) 2019 Sebastien Marie <semarie@online.fr>
+# Copyright (c) 2019,2022 Sebastien Marie <semarie@online.fr>
 #
 # Permission to use, copy, modify, and distribute this software for any
 # purpose with or without fee is hereby granted, provided that the above
@@ -127,14 +127,8 @@ echo "==>> Creating bootstrap directory: ${BOOTSTRAPDIR}"
 # copy files for bootstrap: bin
 mkdir "${BOOTSTRAPDIR}/bin"
 for i in rustc rustdoc cargo ; do
-	cp "${PORTSDIR}/bin/$i" "${BOOTSTRAPDIR}/bin/$i.bin"
-	llvm-strip "${BOOTSTRAPDIR}/bin/$i.bin"
-
-	cat >"${BOOTSTRAPDIR}/bin/$i" <<EOF
-#!/bin/sh
-_base="\${0%/*}"
-LD_LIBRARY_PATH="\${_base}/../lib\${LD_LIBRARY_PATH:+:}\${LD_LIBRARY_PATH:-}" exec "\${_base}/$i.bin" "\$@"
-EOF
+	cp "${PORTSDIR}/bin/$i" "${BOOTSTRAPDIR}/bin/$i"
+	llvm-strip "${BOOTSTRAPDIR}/bin/$i"
 	chmod 0755 "${BOOTSTRAPDIR}/bin/$i"
 done
 
@@ -178,7 +172,7 @@ addlibs() {
 	done
 }
 
-for elf in "${BOOTSTRAPDIR}/bin/"*.bin "${BOOTSTRAPDIR}/lib/rustlib/${triple_arch}/codegen-backends/"lib*.so ; do
+for elf in "${BOOTSTRAPDIR}/bin/"* "${BOOTSTRAPDIR}/lib/rustlib/${triple_arch}/codegen-backends/"lib*.so ; do
 	[[ ! -r "${elf}" ]] && continue
 	addlibs "${elf}"
 done
