@@ -66,7 +66,7 @@ powerpc64)
 	eports=
 	;;
 riscv64)
-	triple_arch=riscv64-unknown-openbsd
+	triple_arch=riscv64gc-unknown-openbsd
 	eports=
 	;;
 sparc64)
