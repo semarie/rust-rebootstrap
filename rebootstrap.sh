@@ -111,7 +111,7 @@ RV=$(sed -ne 's/^rust-\([0-9].*\)\.tgz$/\1/p' "${PORTSINDEX}")
 echo "==>> Rust version ${RV}"
 
 # process ports bootstrap dependencies
-for pkgname in rust curl nghttp2 libgit2 libssh2 ${eports} ; do
+for pkgname in rust curl nghttp2 nghttp3 libgit2 libssh2 ${eports} ; do
 	pkgfile=$(grep -- "^${pkgname}-[0-9].*\.tgz" "${PORTSINDEX}")
 
 	# download, verify, extract
