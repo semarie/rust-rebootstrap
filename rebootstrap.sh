@@ -61,6 +61,14 @@ i386)
 	triple_arch=i686-unknown-openbsd
 	eports=
 	;;
+powerpc64)
+	triple_arch=powerpc64-unknown-openbsd
+	eports=
+	;;
+riscv64)
+	triple_arch=riscv64-unknown-openbsd
+	eports=
+	;;
 sparc64)
 	triple_arch=sparc64-unknown-openbsd
 	eports=gcc-libs
