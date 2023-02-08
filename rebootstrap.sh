@@ -21,18 +21,26 @@ umask 022
 ARCH=$(machine -a)
 MIRROR=$(sed 's/#.*//;/^$/d' /etc/installurl) 2>/dev/null ||
 	MIRROR='https://cdn.openbsd.org/pub/OpenBSD'
+BMIRROR=''
 
-while getopts 'a:m:' arg; do
+# base mirror: see http://ftp.hostserver.de/archive/YYYY-MM-DD-ZZZZ
+
+while getopts 'a:m:b:' arg; do
 	case ${arg} in
 	a)	ARCH=${OPTARG}
 		;;
 	m)	MIRROR=${OPTARG}
+		[[ ${BMIRROR} = '' ]] && BMIRROR=${MIRROR}
 		;;
-	*)	echo "usage: ${0##*/} [-a arch] [-m mirror]" >&2
+	b)	BMIRROR=${OPTARG}
+		;;
+	*)	echo "usage: ${0##*/} [-a arch] [-m mirror] [-b basemirror]" >&2
 		exit 1
 		;;
 	esac
 done
+
+[[ ${BMIRROR} = '' ]] && BMIRROR=${MIRROR}
 
 # ensure third-parties programs to be present before running
 if ! command -v llvm-strip >/dev/null; then
@@ -40,7 +48,7 @@ if ! command -v llvm-strip >/dev/null; then
 	exit 1
 fi
 
-MIRRORBASE="${MIRROR}/snapshots/${ARCH}"
+MIRRORBASE="${BMIRROR}/snapshots/${ARCH}"
 MIRRORPORTS="${MIRROR}/snapshots/packages/${ARCH}"
 
 TMPDIR=$(mktemp -d -t rebootstrap.XXXXXXXXXX) || exit 1
@@ -80,6 +88,7 @@ esac
 
 cat <<EOF
 ==>> arch: ${ARCH}
+==>> base mirror: ${BMIRROR}
 ==>> mirror: ${MIRROR}
 EOF
 
