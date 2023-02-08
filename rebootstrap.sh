@@ -170,7 +170,8 @@ addlibs() {
 		# name not found
 		if [[ ${path} = "" ]] ; then
 			echo "error: library not found: $1: ${name}" >&2
-			exit 1
+			printf "%s\n" "${name}" >> "${BOOTSTRAPDIR}/missing.txt"
+			continue
 		fi
 
 		# already copied, skip
@@ -187,6 +188,11 @@ addlibs() {
 		# recursively add libs
 		addlibs "${path}"
 	done
+
+	if [[ -f "${BOOTSTRAPDIR}/missing.txt" ]]; then
+		sort -u -o "${BOOTSTRAPDIR}/missing.txt" "${BOOTSTRAPDIR}/missing.txt"
+		exit 1
+	fi
 }
 
 for elf in "${BOOTSTRAPDIR}/bin/"* "${BOOTSTRAPDIR}/lib/rustlib/${triple_arch}/codegen-backends/"lib*.so ; do
