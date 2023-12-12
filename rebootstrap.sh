@@ -43,8 +43,8 @@ done
 [[ ${BMIRROR} = '' ]] && BMIRROR=${MIRROR}
 
 # ensure third-parties programs to be present before running
-if ! command -v llvm-strip >/dev/null; then
-	echo "error: llvm-strip missing: please install llvm package" >&2
+if ! command -v llvm-strip-16 >/dev/null; then
+	echo "error: llvm-strip-16 missing: please install llvm package" >&2
 	exit 1
 fi
 
@@ -145,14 +145,14 @@ echo "==>> Creating bootstrap directory: ${BOOTSTRAPDIR}"
 mkdir "${BOOTSTRAPDIR}/bin"
 for i in rustc rustdoc cargo ; do
 	cp "${PORTSDIR}/bin/$i" "${BOOTSTRAPDIR}/bin/$i"
-	llvm-strip "${BOOTSTRAPDIR}/bin/$i"
+	llvm-strip-16 "${BOOTSTRAPDIR}/bin/$i"
 	chmod 0755 "${BOOTSTRAPDIR}/bin/$i"
 done
 
 # copy files for bootstrap: rustlib
 mkdir "${BOOTSTRAPDIR}/lib"
 cp -R "${PORTSDIR}/lib/rustlib" "${BOOTSTRAPDIR}/lib"
-find "${BOOTSTRAPDIR}/lib/rustlib" -name 'lib*.so*' -execdir llvm-strip {} \;
+find "${BOOTSTRAPDIR}/lib/rustlib" -name 'lib*.so*' -execdir llvm-strip-16 {} \;
 
 # copy required libraries
 addlibs() {
@@ -179,7 +179,7 @@ addlibs() {
 
 		# copy (or link if under rustlib/)
 		if [[ ! -r "${BOOTSTRAPDIR}/lib/rustlib/${triple_arch}/lib/${name}" ]] ; then
-			llvm-strip "${path}"
+			llvm-strip-16 "${path}"
 			cp "${path}" "${BOOTSTRAPDIR}/lib"
 		else
 			ln -s "rustlib/${triple_arch}/lib/${name}" "${BOOTSTRAPDIR}/lib/${name}"
