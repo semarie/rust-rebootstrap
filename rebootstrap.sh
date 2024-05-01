@@ -113,5 +113,6 @@ echo "==>> Creating bootstrap archive: ${BOOTSTRAPARC}"
 tarlz --solid -z \
 	${PORTSDIR}/lib/rustc-bootstrap-${ARCH}.tar \
 	-o "${BOOTSTRAPARC}"
+touch "${BOOTSTRAPARC}"
 
 exit 0
